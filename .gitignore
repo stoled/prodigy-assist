@@ -1,2 +1,4 @@
 .env
 postgres_data/
+context.md
+SECURITY.md
