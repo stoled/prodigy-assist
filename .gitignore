@@ -2,3 +2,7 @@
 postgres_data/
 context.md
 SECURITY.md
+node_modules
+__pycache__
+*.pyc
+*.log
