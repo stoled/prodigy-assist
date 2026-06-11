@@ -1,7 +1,6 @@
 .env
 postgres_data/
-context.md
-SECURITY.md
+context/
 node_modules
 __pycache__
 *.pyc
