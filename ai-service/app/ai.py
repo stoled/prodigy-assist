@@ -21,5 +21,6 @@ async def generate_reply(user_message: str) -> str:
         ],
         max_tokens=settings.openai_max_tokens,
         timeout=settings.openai_timeout,
+        temperature=settings.openai_temperature,
     )
     return response.choices[0].message.content or ""
