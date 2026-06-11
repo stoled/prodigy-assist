@@ -1,40 +1,26 @@
 import { Telegraf } from 'telegraf';
-import axios from 'axios';
+import { config } from './config.js';
+import { BackendAPI } from './api.js';
+import { BotHandlers } from './handlers.js';
+import { logger } from './logger.js';
+import { message } from 'telegraf/filters';
 
-const token = process.env.TELEGRAM_TOKEN;
-const backendUrl = process.env.BACKEND_URL ?? 'http://backend:3000';
+const bot = new Telegraf(config.telegramToken!);
+const api = new BackendAPI();
+const handlers = new BotHandlers(api);
 
-if (!token) {
-  throw new Error('TELEGRAM_TOKEN is not set');
-}
-
-const bot = new Telegraf(token);
-
-bot.start((ctx) => {
-  ctx.reply('Привет! Я бот-всезнайка. Задавай любые вопросы!');
-});
-
-bot.on('text', async (ctx) => {
-  const telegramId = String(ctx.from.id);
-  const text = ctx.message.text;
-
-  try {
-    await ctx.sendChatAction('typing');
-
-    const { data } = await axios.post<{ reply: string }>(
-      `${backendUrl}/messages`,
-      { telegramId, text },
-    );
-
-    await ctx.reply(data.reply);
-  } catch (err) {
-    console.error('Error calling backend:', err);
-    await ctx.reply('Произошла ошибка. Попробуй ещё раз.');
-  }
-});
+bot.start((ctx) => handlers.handleStart(ctx));
+bot.on(message('text'), (ctx) => handlers.handleText(ctx));
 
 bot.launch();
-console.log('Telegram bot started');
+logger.info('Telegram bot started');
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+process.once('SIGINT', () => {
+  logger.info('Received SIGINT, stopping bot');
+  bot.stop('SIGINT');
+});
+
+process.once('SIGTERM', () => {
+  logger.info('Received SIGTERM, stopping bot');
+  bot.stop('SIGTERM');
+});
