@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -24,8 +25,16 @@ export class MessagesController {
 
   // GET /messages/:telegramId — история диалога
   @Get(':telegramId')
-  getHistory(@Param('telegramId') telegramId: string) {
-    return this.messagesService.getHistory(telegramId);
+  getHistory(
+    @Param('telegramId') telegramId: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.messagesService.getHistory(
+      telegramId,
+      limit ? parseInt(limit, 10) : undefined,
+      offset ? parseInt(offset, 10) : undefined,
+    );
   }
 
   // DELETE /messages/:telegramId — удалить историю

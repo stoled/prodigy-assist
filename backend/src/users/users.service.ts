@@ -19,7 +19,9 @@ export class UsersService {
       where: { telegramId },
     });
     if (!user) {
-      throw new NotFoundException(`User with telegramId ${telegramId} not found`);
+      throw new NotFoundException(
+        `User with telegramId ${telegramId} not found`,
+      );
     }
     return user;
   }

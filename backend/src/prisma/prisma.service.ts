@@ -13,7 +13,7 @@ export class PrismaService
     const connectionString = configService.get<string>('DATABASE_URL');
     const pool = new Pool({ connectionString });
     const adapter = new PrismaPg(pool);
-    
+
     super({ adapter });
   }
 

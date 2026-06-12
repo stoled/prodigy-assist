@@ -1,4 +1,8 @@
-import { Injectable, ServiceUnavailableException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  ServiceUnavailableException,
+  Logger,
+} from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { AxiosError } from 'axios';
@@ -76,22 +80,23 @@ export class MessagesService {
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const { data } = await this.httpService.axiosRef.post<{ reply: string }>(
-          `${url}/generate`,
-          { message },
-          { timeout: 30000 },
-        );
+        const { data } = await this.httpService.axiosRef.post<{
+          reply: string;
+        }>(`${url}/generate`, { message }, { timeout: 30000 });
         return data.reply;
       } catch (error) {
         lastError = error as Error;
         const axiosError = error as AxiosError;
-        
-        this.logger.warn(`AI Service call failed (attempt ${attempt + 1}/${maxRetries + 1})`, {
-          telegramId,
-          error: axiosError.message,
-          status: axiosError.response?.status,
-          url,
-        });
+
+        this.logger.warn(
+          `AI Service call failed (attempt ${attempt + 1}/${maxRetries + 1})`,
+          {
+            telegramId,
+            error: axiosError.message,
+            status: axiosError.response?.status,
+            url,
+          },
+        );
 
         // Если это последняя попытка, не ждём
         if (attempt < maxRetries) {
@@ -107,12 +112,37 @@ export class MessagesService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async getHistory(telegramId: string) {
+  async getHistory(telegramId: string, limit = 50, offset = 0) {
     const user = await this.usersService.findByTelegramId(telegramId);
-    return this.prisma.message.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'asc' },
+
+    const questions = await this.prisma.message.findMany({
+      where: {
+        userId: user.id,
+        parentId: null,
+      },
+      include: {
+        replies: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: offset,
+      take: limit,
     });
+
+    const total = await this.prisma.message.count({
+      where: { userId: user.id, parentId: null },
+    });
+
+    return {
+      data: questions,
+      pagination: {
+        total,
+        limit,
+        offset,
+        hasMore: offset + limit < total,
+      },
+    };
   }
 
   async deleteHistory(telegramId: string) {
