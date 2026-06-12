@@ -1,7 +1,7 @@
 import { Injectable, ServiceUnavailableException, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom, retry, timeout, catchError } from 'rxjs';
+import { AxiosError } from 'axios';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -29,51 +29,27 @@ export class MessagesService {
         role: 'user',
         content: dto.text,
         userId: user.id,
-        parentId: null, // Вопрос не имеет родителя
+        parentId: null,
       },
     });
 
-    // 3. Запросить ответ у AI Service с обработкой ошибок
+    // 3. Запросить ответ у AI Service с retry логикой
     const aiServiceUrl = this.configService.get<string>('AI_SERVICE_URL');
-    
     let reply: string;
+
     try {
-      const { data } = await firstValueFrom(
-        this.httpService.post<{ reply: string }>(
-          `${aiServiceUrl}/generate`,
-          { message: dto.text },
-          { timeout: 30000 } // 30 секунд
-        ).pipe(
-          timeout(30000),
-          retry({
-            count: 2,
-            delay: 1000,
-          }),
-          catchError((error) => {
-            this.logger.error('AI Service error', {
-              telegramId: dto.telegramId,
-              error: error.message,
-              url: aiServiceUrl,
-            });
-            throw new ServiceUnavailableException(
-              'AI service temporarily unavailable. Please try again later.'
-            );
-          })
-        )
+      reply = await this.callAiServiceWithRetry(
+        aiServiceUrl!,
+        dto.text,
+        dto.telegramId,
       );
-      reply = data.reply;
     } catch (error) {
-      // Если ошибка уже ServiceUnavailableException, пробрасываем её
-      if (error instanceof ServiceUnavailableException) {
-        throw error;
-      }
-      
-      this.logger.error('Unexpected error calling AI Service', {
+      this.logger.error('Failed to get AI response after retries', {
         telegramId: dto.telegramId,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new ServiceUnavailableException(
-        'AI service temporarily unavailable. Please try again later.'
+        'AI service temporarily unavailable. Please try again later.',
       );
     }
 
@@ -83,11 +59,52 @@ export class MessagesService {
         role: 'assistant',
         content: reply,
         userId: user.id,
-        parentId: userMessage.id, // Связываем ответ с вопросом
+        parentId: userMessage.id,
       },
     });
 
     return { reply };
+  }
+
+  private async callAiServiceWithRetry(
+    url: string,
+    message: string,
+    telegramId: string,
+    maxRetries = 2,
+  ): Promise<string> {
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const { data } = await this.httpService.axiosRef.post<{ reply: string }>(
+          `${url}/generate`,
+          { message },
+          { timeout: 30000 },
+        );
+        return data.reply;
+      } catch (error) {
+        lastError = error as Error;
+        const axiosError = error as AxiosError;
+        
+        this.logger.warn(`AI Service call failed (attempt ${attempt + 1}/${maxRetries + 1})`, {
+          telegramId,
+          error: axiosError.message,
+          status: axiosError.response?.status,
+          url,
+        });
+
+        // Если это последняя попытка, не ждём
+        if (attempt < maxRetries) {
+          await this.delay(1000);
+        }
+      }
+    }
+
+    throw lastError || new Error('AI Service unavailable');
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async getHistory(telegramId: string) {
