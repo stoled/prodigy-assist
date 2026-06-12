@@ -23,12 +23,13 @@ export class MessagesService {
       telegramId: dto.telegramId,
     });
 
-    // 2. Сохранить сообщение пользователя
-    await this.prisma.message.create({
+    // 2. Сохранить сообщение пользователя (вопрос)
+    const userMessage = await this.prisma.message.create({
       data: {
         role: 'user',
         content: dto.text,
         userId: user.id,
+        parentId: null, // Вопрос не имеет родителя
       },
     });
 
@@ -76,12 +77,13 @@ export class MessagesService {
       );
     }
 
-    // 4. Сохранить ответ ассистента
+    // 4. Сохранить ответ ассистента (связать с вопросом)
     await this.prisma.message.create({
       data: {
         role: 'assistant',
         content: reply,
         userId: user.id,
+        parentId: userMessage.id, // Связываем ответ с вопросом
       },
     });
 

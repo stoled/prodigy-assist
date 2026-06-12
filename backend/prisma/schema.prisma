@@ -23,5 +23,13 @@ model Message {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
 
+  // Связь вопрос-ответ
+  parentId  String?  // ID сообщения-вопроса (null для вопросов)
+  parent    Message? @relation("QuestionAnswer", fields: [parentId], references: [id])
+  replies   Message[] @relation("QuestionAnswer")
+
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([parentId])
 }
