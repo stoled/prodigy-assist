@@ -2,7 +2,7 @@ from openai import AsyncOpenAI
 from app.config import settings
 
 client = AsyncOpenAI(
-    base_url="https://openrouter.ai/api/v1",
+    # base_url="https://openrouter.ai/api/v1",
     api_key=settings.ai_api_key,
 )
 
