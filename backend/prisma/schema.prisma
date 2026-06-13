@@ -33,3 +33,29 @@ model Message {
   @@index([userId])
   @@index([parentId])
 }
+
+model Document {
+  id        String          @id @default(uuid())
+  title     String
+  content   String
+  source    String          // URL Wikipedia или "manual"
+  lang      String          @default("en")
+  createdAt DateTime        @default(now())
+
+  chunks    DocumentChunk[]
+}
+
+model DocumentChunk {
+  id         String   @id @default(uuid())
+  content    String
+  chunkIndex Int
+
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  embedding  Unsupported("vector(1536)")?
+
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
+}
