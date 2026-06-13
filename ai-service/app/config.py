@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    database_url: str
     ai_api_key: str
     ai_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
     ai_max_tokens: int = 1500
