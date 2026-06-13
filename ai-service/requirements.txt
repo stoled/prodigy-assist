@@ -5,4 +5,4 @@ pydantic-settings
 asyncpg
 pgvector
 tiktoken
-sentence-transformers
+fastembed

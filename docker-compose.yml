@@ -40,9 +40,13 @@ services:
     restart: unless-stopped
     environment:
       AI_API_KEY: ${AI_API_KEY}
+      DATABASE_URL: postgresql://prodigy:prodigy@postgres:5432/prodigy
       PORT: 8000
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   telegram-bot:
     build:

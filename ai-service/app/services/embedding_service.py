@@ -1,18 +1,18 @@
 import tiktoken
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from app.services.db import get_pool
 
-EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHUNK_MAX_TOKENS = 512
 CHUNK_OVERLAP_TOKENS = 50
 
-_model: SentenceTransformer | None = None
+_model: TextEmbedding | None = None
 
 
-def get_model() -> SentenceTransformer:
+def get_model() -> TextEmbedding:
     global _model
     if _model is None:
-        _model = SentenceTransformer(EMBEDDING_MODEL)
+        _model = TextEmbedding(EMBEDDING_MODEL)
     return _model
 
 
@@ -33,8 +33,8 @@ def split_into_chunks(text: str) -> list[str]:
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     model = get_model()
-    embeddings = model.encode(texts, convert_to_numpy=True)
-    return embeddings.tolist()
+    embeddings = list(model.embed(texts))
+    return [e.tolist() for e in embeddings]
 
 
 def embed_query(text: str) -> list[float]:
