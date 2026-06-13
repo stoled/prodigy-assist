@@ -10,6 +10,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { SendMessageDto } from './dto/send-message.dto';
 
+const HISTORY_LIMIT = 10; // последних пар вопрос-ответ
+
 @Injectable()
 export class MessagesService {
   private readonly logger = new Logger(MessagesService.name);
@@ -27,7 +29,10 @@ export class MessagesService {
       telegramId: dto.telegramId,
     });
 
-    // 2. Сохранить сообщение пользователя (вопрос)
+    // 2. Загрузить историю диалога
+    const history = await this.buildHistory(user.id);
+
+    // 3. Сохранить сообщение пользователя (вопрос)
     const userMessage = await this.prisma.message.create({
       data: {
         role: 'user',
@@ -37,7 +42,7 @@ export class MessagesService {
       },
     });
 
-    // 3. Запросить ответ у AI Service с retry логикой
+    // 4. Запросить ответ у AI Service с retry логикой
     const aiServiceUrl = this.configService.get<string>('AI_SERVICE_URL');
     let reply: string;
 
@@ -46,6 +51,7 @@ export class MessagesService {
         aiServiceUrl!,
         dto.text,
         dto.telegramId,
+        history,
       );
     } catch (error) {
       this.logger.error('Failed to get AI response after retries', {
@@ -57,7 +63,7 @@ export class MessagesService {
       );
     }
 
-    // 4. Сохранить ответ ассистента (связать с вопросом)
+    // 5. Сохранить ответ ассистента (связать с вопросом)
     await this.prisma.message.create({
       data: {
         role: 'assistant',
@@ -70,10 +76,34 @@ export class MessagesService {
     return { reply };
   }
 
+  private async buildHistory(
+    userId: string,
+  ): Promise<{ role: string; content: string }[]> {
+    const questions = await this.prisma.message.findMany({
+      where: { userId, parentId: null },
+      include: {
+        replies: { orderBy: { createdAt: 'asc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: HISTORY_LIMIT,
+    });
+
+    // Разворачиваем в хронологическом порядке и flatten в flat list
+    return questions
+      .reverse()
+      .flatMap((q) => [
+        { role: 'user', content: q.content },
+        ...(q.replies[0]
+          ? [{ role: 'assistant', content: q.replies[0].content }]
+          : []),
+      ]);
+  }
+
   private async callAiServiceWithRetry(
     url: string,
     message: string,
     telegramId: string,
+    history: { role: string; content: string }[] = [],
     maxRetries = 2,
   ): Promise<string> {
     let lastError: Error | undefined;
@@ -82,7 +112,11 @@ export class MessagesService {
       try {
         const { data } = await this.httpService.axiosRef.post<{
           reply: string;
-        }>(`${url}/generate`, { message }, { timeout: 30000 });
+        }>(
+          `${url}/generate`,
+          { message, history, use_rag: true },
+          { timeout: 60000 },
+        );
         return data.reply;
       } catch (error) {
         lastError = error as Error;
@@ -98,7 +132,6 @@ export class MessagesService {
           },
         );
 
-        // Если это последняя попытка, не ждём
         if (attempt < maxRetries) {
           await this.delay(1000);
         }
@@ -116,14 +149,9 @@ export class MessagesService {
     const user = await this.usersService.findByTelegramId(telegramId);
 
     const questions = await this.prisma.message.findMany({
-      where: {
-        userId: user.id,
-        parentId: null,
-      },
+      where: { userId: user.id, parentId: null },
       include: {
-        replies: {
-          orderBy: { createdAt: 'asc' },
-        },
+        replies: { orderBy: { createdAt: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
       skip: offset,

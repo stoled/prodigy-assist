@@ -12,6 +12,8 @@ SYSTEM_PROMPT = (
     "Если используешь информацию из базы знаний — указывай источник."
 )
 
+MAX_RETRIES = 3
+
 
 async def generate_reply(
     user_message: str,
@@ -34,11 +36,19 @@ async def generate_reply(
 
     messages.append({"role": "user", "content": user_message})
 
-    response = await client.chat.completions.create(
-        model=settings.ai_model,
-        messages=messages,
-        max_tokens=settings.ai_max_tokens,
-        timeout=settings.ai_timeout,
-        temperature=settings.ai_temperature,
-    )
-    return response.choices[0].message.content or ""
+    for attempt in range(MAX_RETRIES):
+        response = await client.chat.completions.create(
+            model=settings.ai_model,
+            messages=messages,
+            max_tokens=settings.ai_max_tokens,
+            timeout=settings.ai_timeout,
+            temperature=settings.ai_temperature,
+        )
+        result = response.choices[0].message.content or ""
+
+        if result.strip():
+            return result
+
+        print(f"Empty response from LLM, attempt {attempt + 1}/{MAX_RETRIES}")
+
+    return ""
