@@ -2,11 +2,11 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    openai_api_key: str
-    openai_model: str = "gpt-4o-mini"
-    openai_max_tokens: int = 1500
-    openai_timeout: float = 30.0
-    openai_temperature: float = 0.3
+    ai_api_key: str
+    ai_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    ai_max_tokens: int = 1500
+    ai_timeout: float = 60.0
+    ai_temperature: float = 0.3
     max_message_length: int = 4000
     port: int = 8000
 
