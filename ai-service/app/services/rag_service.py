@@ -67,3 +67,53 @@ def format_context(chunks: list[dict]) -> str:
         parts.append(f"[{title}]({source}):\n{content}")
 
     return "\n\n---\n\n".join(parts)
+
+
+async def source_exists(source_url: str) -> bool:
+    """Проверяет — есть ли уже документ с таким source URL в БД."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            'SELECT id FROM "Document" WHERE source = $1 LIMIT 1',
+            source_url,
+        )
+    return row is not None
+
+
+async def save_document(title: str, content: str, source: str, lang: str) -> str:
+    """Сохраняет Document в PostgreSQL. Возвращает id."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO "Document" (id, title, content, source, lang, "createdAt")
+            VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())
+            RETURNING id
+            """,
+            title, content, source, lang,
+        )
+    return str(row["id"])
+
+
+async def index_wikipedia_article(article) -> tuple[str, int]:
+    """
+    Полный цикл: сохранить Document + проиндексировать чанки.
+    Возвращает (document_id, chunks_count).
+    Пропускает если статья уже проиндексирована (дедупликация по URL).
+    """
+    from app.wikipedia.parser import article_to_text
+
+    if await source_exists(article.url):
+        print(f"[Wikipedia] Already indexed: {article.url}")
+        return "", 0
+
+    text = article_to_text(article)
+    document_id = await save_document(
+        title=article.title,
+        content=text,
+        source=article.url,
+        lang=article.lang,
+    )
+    chunks_count = await index_document(document_id, text)
+    print(f"[Wikipedia] Indexed: {article.title} ({chunks_count} chunks)")
+    return document_id, chunks_count
