@@ -6,3 +6,6 @@ asyncpg
 pgvector
 tiktoken
 fastembed
+wikipedia-api
+beautifulsoup4
+langdetect
