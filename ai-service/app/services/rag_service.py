@@ -1,5 +1,9 @@
+import logging
+
 from app.services.db import get_pool
 from app.services.embedding_service import split_into_chunks, embed_texts, embed_query
+
+logger = logging.getLogger(__name__)
 
 
 async def index_document(document_id: str, text: str) -> int:
@@ -104,7 +108,7 @@ async def index_wikipedia_article(article) -> tuple[str, int]:
     from app.wikipedia.parser import article_to_text
 
     if await source_exists(article.url):
-        print(f"[Wikipedia] Already indexed: {article.url}")
+        logger.info("Wikipedia article already indexed", extra={"url": article.url})
         return "", 0
 
     text = article_to_text(article)
@@ -115,5 +119,5 @@ async def index_wikipedia_article(article) -> tuple[str, int]:
         lang=article.lang,
     )
     chunks_count = await index_document(document_id, text)
-    print(f"[Wikipedia] Indexed: {article.title} ({chunks_count} chunks)")
+    logger.info("Wikipedia article indexed", extra={"title": article.title, "url": article.url, "chunks_count": chunks_count})
     return document_id, chunks_count

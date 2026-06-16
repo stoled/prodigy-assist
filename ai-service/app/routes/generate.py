@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter
 from app.schemas.generate import GenerateRequest, GenerateResponse
 from app.services.llm_service import generate_reply
@@ -5,6 +7,7 @@ from app.services.rag_service import search, format_context, index_wikipedia_art
 from app.wikipedia.fetcher import fetch_wikipedia
 from app.exceptions import MessageTooLongError
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 WIKIPEDIA_FETCH_THRESHOLD = 0.5
@@ -18,18 +21,30 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
         if body.use_rag:
             chunks = await search(query=body.message)
             max_score = max((c["score"] for c in chunks), default=0.0)
-
-            print(f"[RAG] chunks: {len(chunks)}, max_score: {max_score:.3f}")  # временно
+            logger.info(
+                "RAG search completed",
+                extra={"user_message": body.message, "chunks": len(chunks), "max_score": max_score},
+            )
 
             if not chunks or max_score < WIKIPEDIA_FETCH_THRESHOLD:
-                lang = body.lang or None
-                print(f"[Wikipedia] Fetching: '{body.message}', lang={lang}")  # временно
-                article = await fetch_wikipedia(body.message, lang=lang)
-                print(f"[Wikipedia] Article: {article}")  # временно
+                logger.info(
+                    "RAG fallback to Wikipedia",
+                    extra={"user_message": body.message, "lang": body.lang, "chunks": len(chunks), "max_score": max_score},
+                )
+                try:
+                    article = await fetch_wikipedia(body.message, lang=body.lang)
+                except Exception as exc:
+                    logger.warning("Wikipedia fetch failed", exc_info=exc)
+                    article = None
 
                 if article:
                     await index_wikipedia_article(article)
                     chunks = await search(query=body.message)
+                else:
+                    logger.info(
+                        "Wikipedia fallback returned no article",
+                        extra={"user_message": body.message, "lang": body.lang},
+                    )
 
             if chunks:
                 context = format_context(chunks)

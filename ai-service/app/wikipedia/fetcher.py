@@ -1,6 +1,22 @@
-import wikipediaapi
+import asyncio
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+
+import requests
+import wikipediaapi
 from app.wikipedia.lang_detector import detect_lang
+
+logger = logging.getLogger(__name__)
+
+WIKIPEDIA_API_ENDPOINTS = {
+    "en": "https://en.wikipedia.org/w/api.php",
+    "ru": "https://ru.wikipedia.org/w/api.php",
+}
+
+SEARCH_TIMEOUT = 5.0
+SEARCH_LIMIT = 5
+USER_AGENT = "Mozilla/5.0 (compatible; ProdigyBot/1.0; +https://github.com/stoled/prodigy-assist)"
 
 
 @dataclass
@@ -21,29 +37,44 @@ class WikipediaArticle:
 def _make_client(lang: str) -> wikipediaapi.Wikipedia:
     return wikipediaapi.Wikipedia(
         language=lang,
-        user_agent="prodigy-knowledge-bot/1.0",
+        user_agent=USER_AGENT,
     )
 
 
-def extract_topic(query: str) -> str:
-    """
-    Извлекает ключевую тему из вопроса в свободной форме.
-    Убирает вопросительные слова и глаголы-вводные.
-    """
-    stopwords = [
-        "расскажи о", "расскажи про", "что такое", "кто такой", "кто такая",
-        "что известно о", "что известно про", "объясни", "опиши",
-        "tell me about", "what is", "who is", "explain", "describe",
-        "what are", "how does", "how do",
-    ]
-    topic = query.strip().rstrip("?").strip()
+def _mw_search_sync(query: str, lang: str = "en", limit: int = SEARCH_LIMIT) -> list[str]:
+    endpoint = WIKIPEDIA_API_ENDPOINTS.get(lang, WIKIPEDIA_API_ENDPOINTS["en"])
+    params = {
+        "action": "query",
+        "list": "search",
+        "srsearch": query,
+        "srlimit": limit,
+        "srenablerewrites": 1,
+        "format": "json",
+        "utf8": 1,
+    }
+    headers = {"User-Agent": USER_AGENT}
+    response = requests.get(endpoint, params=params, headers=headers, timeout=SEARCH_TIMEOUT)
+    response.raise_for_status()
+    data = response.json()
+    return [item["title"] for item in data.get("query", {}).get("search", [])]
 
-    for stopword in stopwords:
-        if topic.lower().startswith(stopword):
-            topic = topic[len(stopword):].strip()
-            break
 
-    return topic
+def _fetch_page_sync(lang: str, title: str) -> wikipediaapi.WikipediaPage:
+    client = _make_client(lang)
+    return client.page(title)
+
+
+async def _run_in_executor(func, *args):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, lambda: func(*args))
+
+
+async def search_titles(query: str, lang: str = "en", limit: int = SEARCH_LIMIT) -> list[str]:
+    return await _run_in_executor(_mw_search_sync, query, lang, limit)
+
+
+async def fetch_page(title: str, lang: str) -> wikipediaapi.WikipediaPage:
+    return await _run_in_executor(_fetch_page_sync, lang, title)
 
 
 async def fetch_wikipedia(topic: str, lang: str | None = None) -> WikipediaArticle | None:
@@ -55,34 +86,60 @@ async def fetch_wikipedia(topic: str, lang: str | None = None) -> WikipediaArtic
     if lang is None:
         lang = detect_lang(topic)
 
-    # Извлекаем ключевую тему из вопроса
-    clean_topic = extract_topic(topic)
-    print(f"[Wikipedia] Clean topic: '{clean_topic}' (lang={lang})")
+    query = topic.strip()
+    if not query:
+        logger.debug("Empty Wikipedia query received")
+        return None
 
-    client = _make_client(lang)
-    page = client.page(clean_topic)
+    logger.info("Searching Wikipedia", extra={"query": query, "lang": lang})
 
-    if not page.exists():
-        # Fallback: попробовать на английском если не нашли на русском
-        if lang == "ru":
-            client = _make_client("en")
-            page = client.page(clean_topic)
-            if not page.exists():
-                return None
-            lang = "en"
-        else:
-            return None
+    titles: list[str] = []
+    try:
+        titles = await asyncio.wait_for(search_titles(query, lang), timeout=SEARCH_TIMEOUT + 1)
+        logger.debug("Wikipedia search titles", extra={"titles": titles, "lang": lang})
+    except Exception as exc:
+        logger.warning("Wikipedia search failed", exc_info=exc)
+        titles = []
 
-    sections = [
-        WikipediaSection(title=s.title, content=s.text)
-        for s in page.sections
-        if s.text.strip()
-    ]
+    if not titles and lang == "ru":
+        try:
+            titles = await asyncio.wait_for(search_titles(query, "en"), timeout=SEARCH_TIMEOUT + 1)
+            if titles:
+                logger.info("Wikipedia search fallback to English succeeded", extra={"titles": titles})
+                lang = "en"
+        except Exception as exc:
+            logger.warning("Wikipedia search fallback failed", exc_info=exc)
+            titles = []
 
-    return WikipediaArticle(
-        title=page.title,
-        url=page.fullurl,
-        summary=page.summary,
-        sections=sections,
-        lang=lang,
-    )
+    if not titles:
+        logger.info("No Wikipedia titles found", extra={"query": query, "lang": lang})
+        return None
+
+    for title in titles:
+        try:
+            logger.debug("Fetching Wikipedia page", extra={"title": title, "lang": lang})
+            page = await asyncio.wait_for(fetch_page(title, lang), timeout=SEARCH_TIMEOUT + 1)
+            if not page or not page.exists():
+                logger.debug("Wikipedia page not found or empty", extra={"title": title, "lang": lang})
+                continue
+
+            sections = [
+                WikipediaSection(title=s.title, content=s.text)
+                for s in page.sections
+                if s.text.strip()
+            ]
+
+            logger.info("Wikipedia article loaded", extra={"title": page.title, "url": page.fullurl})
+            return WikipediaArticle(
+                title=page.title,
+                url=page.fullurl,
+                summary=page.summary,
+                sections=sections,
+                lang=lang,
+            )
+        except Exception as exc:
+            logger.warning("Failed to fetch Wikipedia page", exc_info=exc, extra={"title": title, "lang": lang})
+            continue
+
+    logger.info("No valid Wikipedia page found for titles", extra={"titles": titles, "lang": lang})
+    return None
