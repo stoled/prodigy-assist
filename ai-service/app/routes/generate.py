@@ -20,7 +20,7 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
 
         if body.use_rag:
             # Search with lower threshold (0.2) to include more results, Wikipedia fallback at 0.5
-            chunks = await search(query=body.message, min_score=0.2)
+            chunks = await search(query=body.message, top_k=5)
             max_score = max((c["score"] for c in chunks), default=0.0)
             logger.info(
                 f"RAG search completed: {len(chunks)} chunks, max_score={max_score:.3f}",
@@ -40,7 +40,7 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
 
                 if article:
                     await index_wikipedia_article(article)
-                    chunks = await search(query=body.message, min_score=0.2)
+                    chunks = await search(query=body.message, top_k=5)
                 else:
                     logger.info(
                         "Wikipedia fallback returned no article",
