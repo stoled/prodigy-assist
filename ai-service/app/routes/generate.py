@@ -10,7 +10,7 @@ from app.exceptions import MessageTooLongError
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-WIKIPEDIA_FETCH_THRESHOLD = 0.7  # Lower threshold for semantic similarity (all-MiniLM-L6-v2)
+WIKIPEDIA_FETCH_THRESHOLD = 0.7
 
 
 @router.post("/generate", response_model=GenerateResponse)
@@ -19,7 +19,6 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
         context: str | None = None
 
         if body.use_rag:
-            # Search with lower threshold (0.2) to include more results, Wikipedia fallback at 0.5
             chunks = await search(query=body.message, top_k=5)
             max_score = max((c["score"] for c in chunks), default=0.0)
             logger.info(
