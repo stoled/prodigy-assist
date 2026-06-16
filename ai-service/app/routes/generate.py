@@ -10,7 +10,7 @@ from app.exceptions import MessageTooLongError
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-WIKIPEDIA_FETCH_THRESHOLD = 0.5
+WIKIPEDIA_FETCH_THRESHOLD = 0.7  # Lower threshold for semantic similarity (all-MiniLM-L6-v2)
 
 
 @router.post("/generate", response_model=GenerateResponse)
@@ -19,16 +19,17 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
         context: str | None = None
 
         if body.use_rag:
-            chunks = await search(query=body.message)
+            # Search with lower threshold (0.2) to include more results, Wikipedia fallback at 0.5
+            chunks = await search(query=body.message, min_score=0.2)
             max_score = max((c["score"] for c in chunks), default=0.0)
             logger.info(
-                "RAG search completed",
+                f"RAG search completed: {len(chunks)} chunks, max_score={max_score:.3f}",
                 extra={"user_message": body.message, "chunks": len(chunks), "max_score": max_score},
             )
 
             if not chunks or max_score < WIKIPEDIA_FETCH_THRESHOLD:
                 logger.info(
-                    "RAG fallback to Wikipedia",
+                    f"RAG fallback to Wikipedia: {len(chunks)} chunks, max_score={max_score:.3f}, lang={body.lang}",
                     extra={"user_message": body.message, "lang": body.lang, "chunks": len(chunks), "max_score": max_score},
                 )
                 try:
@@ -39,7 +40,7 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
 
                 if article:
                     await index_wikipedia_article(article)
-                    chunks = await search(query=body.message)
+                    chunks = await search(query=body.message, min_score=0.2)
                 else:
                     logger.info(
                         "Wikipedia fallback returned no article",

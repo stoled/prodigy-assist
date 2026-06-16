@@ -99,6 +99,12 @@ export class MessagesService {
       ]);
   }
 
+  private detectLanguage(text: string): string {
+    // Simple heuristic: detect Russian by checking for Cyrillic characters
+    const cyrillicPattern = /[\u0400-\u04FF]/;
+    return cyrillicPattern.test(text) ? 'ru' : 'en';
+  }
+
   private async callAiServiceWithRetry(
     url: string,
     message: string,
@@ -106,6 +112,11 @@ export class MessagesService {
     history: { role: string; content: string }[] = [],
     maxRetries = 2,
   ): Promise<string> {
+    // Determine language from message text
+    const lang = this.detectLanguage(message);
+
+    this.logger.log(`Calling AI Service for user ${telegramId} with lang=${lang}`);
+
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -114,7 +125,7 @@ export class MessagesService {
           reply: string;
         }>(
           `${url}/generate`,
-          { message, history, use_rag: true },
+          { message, history, use_rag: true, lang },
           { timeout: 60000 },
         );
         return data.reply;
@@ -126,6 +137,7 @@ export class MessagesService {
           `AI Service call failed (attempt ${attempt + 1}/${maxRetries + 1})`,
           {
             telegramId,
+            lang,
             error: axiosError.message,
             status: axiosError.response?.status,
             url,
