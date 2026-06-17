@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import requests
@@ -64,6 +63,52 @@ def _fetch_page_sync(lang: str, title: str) -> wikipediaapi.WikipediaPage:
     return client.page(title)
 
 
+def extract_topic(query: str) -> str:
+    stopwords = [
+        "расскажи о", "расскажи про", "что такое", "кто такой", "кто такая",
+        "что известно о", "что известно про", "объясни", "опиши",
+        "tell me about", "what is", "who is", "explain", "describe",
+        "what are", "how does", "how do",
+    ]
+    topic = query.strip().rstrip("?").strip()
+
+    for stopword in stopwords:
+        if topic.lower().startswith(stopword):
+            topic = topic[len(stopword):].strip()
+            break
+
+    return topic
+
+
+def _best_title(query: str, titles: list[str]) -> str | None:
+    """
+    Выбирает наиболее подходящий заголовок из результатов поиска.
+    Предпочитает точное совпадение с запросом.
+    """
+    if not titles:
+        return None
+
+    query_lower = query.lower()
+
+    # Точное совпадение
+    for title in titles:
+        if title.lower() == query_lower:
+            return title
+
+    # Частичное совпадение — заголовок содержит запрос
+    for title in titles:
+        if query_lower in title.lower():
+            return title
+
+    # Запрос содержит заголовок
+    for title in titles:
+        if title.lower() in query_lower:
+            return title
+
+    # Первый результат как fallback
+    return titles[0]
+
+
 async def _run_in_executor(func, *args):
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, lambda: func(*args))
@@ -78,11 +123,6 @@ async def fetch_page(title: str, lang: str) -> wikipediaapi.WikipediaPage:
 
 
 async def fetch_wikipedia(topic: str, lang: str | None = None) -> WikipediaArticle | None:
-    """
-    Ищет и загружает статью из Wikipedia.
-    Если lang не указан — определяет по тексту запроса.
-    Возвращает None если статья не найдена.
-    """
     if lang is None:
         lang = detect_lang(topic)
 
@@ -91,11 +131,15 @@ async def fetch_wikipedia(topic: str, lang: str | None = None) -> WikipediaArtic
         logger.debug("Empty Wikipedia query received")
         return None
 
-    logger.info("Searching Wikipedia", extra={"query": query, "lang": lang})
+    # Очищаем тему до поиска
+    clean_query = extract_topic(query)
+    logger.info("Searching Wikipedia", extra={"query": clean_query, "lang": lang})
 
     titles: list[str] = []
     try:
-        titles = await asyncio.wait_for(search_titles(query, lang), timeout=SEARCH_TIMEOUT + 1)
+        titles = await asyncio.wait_for(
+            search_titles(clean_query, lang), timeout=SEARCH_TIMEOUT + 1
+        )
         logger.debug("Wikipedia search titles", extra={"titles": titles, "lang": lang})
     except Exception as exc:
         logger.warning("Wikipedia search failed", exc_info=exc)
@@ -103,7 +147,9 @@ async def fetch_wikipedia(topic: str, lang: str | None = None) -> WikipediaArtic
 
     if not titles and lang == "ru":
         try:
-            titles = await asyncio.wait_for(search_titles(query, "en"), timeout=SEARCH_TIMEOUT + 1)
+            titles = await asyncio.wait_for(
+                search_titles(clean_query, "en"), timeout=SEARCH_TIMEOUT + 1
+            )
             if titles:
                 logger.info("Wikipedia search fallback to English succeeded", extra={"titles": titles})
                 lang = "en"
@@ -112,34 +158,35 @@ async def fetch_wikipedia(topic: str, lang: str | None = None) -> WikipediaArtic
             titles = []
 
     if not titles:
-        logger.info("No Wikipedia titles found", extra={"query": query, "lang": lang})
+        logger.info("No Wikipedia titles found", extra={"query": clean_query, "lang": lang})
         return None
 
-    for title in titles:
-        try:
-            logger.debug("Fetching Wikipedia page", extra={"title": title, "lang": lang})
-            page = await asyncio.wait_for(fetch_page(title, lang), timeout=SEARCH_TIMEOUT + 1)
-            if not page or not page.exists():
-                logger.debug("Wikipedia page not found or empty", extra={"title": title, "lang": lang})
-                continue
+    best = _best_title(clean_query, titles)
+    if not best:
+        return None
 
-            sections = [
-                WikipediaSection(title=s.title, content=s.text)
-                for s in page.sections
-                if s.text.strip()
-            ]
+    logger.debug("Best Wikipedia title selected", extra={"title": best, "lang": lang})
 
-            logger.info("Wikipedia article loaded", extra={"title": page.title, "url": page.fullurl})
-            return WikipediaArticle(
-                title=page.title,
-                url=page.fullurl,
-                summary=page.summary,
-                sections=sections,
-                lang=lang,
-            )
-        except Exception as exc:
-            logger.warning("Failed to fetch Wikipedia page", exc_info=exc, extra={"title": title, "lang": lang})
-            continue
+    try:
+        page = await asyncio.wait_for(fetch_page(best, lang), timeout=SEARCH_TIMEOUT + 1)
+        if not page or not page.exists():
+            logger.info("Wikipedia page not found", extra={"title": best})
+            return None
 
-    logger.info("No valid Wikipedia page found for titles", extra={"titles": titles, "lang": lang})
-    return None
+        sections = [
+            WikipediaSection(title=s.title, content=s.text)
+            for s in page.sections
+            if s.text.strip()
+        ]
+
+        logger.info("Wikipedia article loaded", extra={"title": page.title, "url": page.fullurl})
+        return WikipediaArticle(
+            title=page.title,
+            url=page.fullurl,
+            summary=page.summary,
+            sections=sections,
+            lang=lang,
+        )
+    except Exception as exc:
+        logger.warning("Failed to fetch Wikipedia page", exc_info=exc, extra={"title": best})
+        return None
