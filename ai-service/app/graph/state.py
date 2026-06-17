@@ -15,3 +15,4 @@ class AgentState(TypedDict):
     error: Optional[str]
     max_rag_retries: int
     rag_retry_count: int
+    action: str  # "search" | "skip" — решение роутера

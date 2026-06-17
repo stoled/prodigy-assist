@@ -21,8 +21,12 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
             "context": None,
             "wikipedia_fetched": False,
             "wikipedia_attempted": False,
+            "wikipedia_article": None,
             "final_answer": None,
             "error": None,
+            "action": "search",
+            "max_rag_retries": 1,
+            "rag_retry_count": 0,
         }
 
         # Запускаем граф
