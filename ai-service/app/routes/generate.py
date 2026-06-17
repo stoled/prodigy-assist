@@ -2,58 +2,39 @@ import logging
 
 from fastapi import APIRouter
 from app.schemas.generate import GenerateRequest, GenerateResponse
-from app.services.llm_service import generate_reply
-from app.services.rag_service import search, format_context, index_wikipedia_article
-from app.wikipedia.fetcher import fetch_wikipedia
+from app.graph.workflow import graph
 from app.exceptions import MessageTooLongError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-WIKIPEDIA_FETCH_THRESHOLD = 0.7
-
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate(body: GenerateRequest) -> GenerateResponse:
     try:
-        context: str | None = None
+        # Инициализируем состояние графа
+        initial_state = {
+            "user_message": body.message,
+            "lang": body.lang or "en",
+            "history": body.history or [],
+            "retrieved_chunks": [],
+            "context": None,
+            "wikipedia_fetched": False,
+            "final_answer": None,
+            "error": None,
+        }
 
-        if body.use_rag:
-            chunks = await search(query=body.message, top_k=5)
-            max_score = max((c["score"] for c in chunks), default=0.0)
-            logger.info(
-                f"RAG search completed: {len(chunks)} chunks, max_score={max_score:.3f}",
-                extra={"user_message": body.message, "chunks": len(chunks), "max_score": max_score},
-            )
+        # Запускаем граф
+        result = await graph.ainvoke(initial_state)
 
-            if not chunks or max_score < WIKIPEDIA_FETCH_THRESHOLD:
-                logger.info(
-                    f"RAG fallback to Wikipedia: {len(chunks)} chunks, max_score={max_score:.3f}, lang={body.lang}",
-                    extra={"user_message": body.message, "lang": body.lang, "chunks": len(chunks), "max_score": max_score},
-                )
-                try:
-                    article = await fetch_wikipedia(body.message, lang=body.lang)
-                except Exception as exc:
-                    logger.warning("Wikipedia fetch failed", exc_info=exc)
-                    article = None
+        # Проверяем ошибки
+        if result.get("error"):
+            logger.error("Graph execution error", extra={"error": result["error"]})
+            raise ValueError(result["error"])
 
-                if article:
-                    await index_wikipedia_article(article)
-                    chunks = await search(query=body.message, top_k=5)
-                else:
-                    logger.info(
-                        "Wikipedia fallback returned no article",
-                        extra={"user_message": body.message, "lang": body.lang},
-                    )
+        final_answer = result.get("final_answer") or "Не удалось получить ответ."
 
-            if chunks:
-                context = format_context(chunks)
+        return GenerateResponse(reply=final_answer)
 
-        reply = await generate_reply(
-            user_message=body.message,
-            history=body.history or [],
-            context=context,
-        )
-        return GenerateResponse(reply=reply)
     except ValueError as e:
         raise MessageTooLongError(str(e))
