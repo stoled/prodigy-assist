@@ -18,8 +18,8 @@ def router_node(state: AgentState) -> dict:
 
     for keyword in GENERAL_KEYWORDS:
         if message.startswith(keyword) or message == keyword:
-            logger.info("Router: general question, skipping RAG", extra={"message": message})
+            logger.info("Router: general question, skipping RAG", extra={"query": message})
             return {"action": "skip"}
 
-    logger.info("Router: RAG search needed", extra={"message": message})
+    logger.info("Router: RAG search needed", extra={"query": message})
     return {"action": "search"}
