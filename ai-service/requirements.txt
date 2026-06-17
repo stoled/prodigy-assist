@@ -9,3 +9,7 @@ fastembed
 wikipedia-api
 beautifulsoup4
 langdetect
+langgraph
+langchain
+langchain-openai
+mcp
