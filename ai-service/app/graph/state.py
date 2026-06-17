@@ -9,6 +9,7 @@ class AgentState(TypedDict):
     retrieved_chunks: list[dict]
     context: Optional[str]
     wikipedia_fetched: bool
+    wikipedia_attempted: bool
     wikipedia_article: Optional[dict]
     final_answer: Optional[str]
     error: Optional[str]

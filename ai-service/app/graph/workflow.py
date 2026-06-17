@@ -21,6 +21,11 @@ def should_search(state: AgentState) -> Literal["rag_search", "llm"]:
 
 def should_fetch_wikipedia(state: AgentState) -> Literal["wikipedia_fetch", "llm"]:
     """Проверяет, нужно ли фетчить Wikipedia."""
+    # Уже пробовали — не зацикливаемся
+    if state.get("wikipedia_attempted"):
+        logger.info("Wikipedia already attempted, skipping to LLM")
+        return "llm"
+
     chunks = state.get("retrieved_chunks", [])
     max_score = max((c["score"] for c in chunks), default=0.0)
 
@@ -41,9 +46,15 @@ def should_retry(state: AgentState) -> Literal["llm", "rag_search", "__end__"]:
         return "llm"
 
     if validation == "empty":
-        logger.warning("Validation: empty answer, retrying with RAG search")
-        state["rag_retry_count"] = retry_count + 1
-        return "rag_search"
+        if retry_count < max_retries:
+            logger.warning(
+                "Validation: empty answer, retrying with RAG search",
+                extra={"retry": retry_count + 1, "max_retries": max_retries},
+            )
+            state["rag_retry_count"] = retry_count + 1
+            return "rag_search"
+        logger.error("Validation: empty answer, max retries exhausted, finishing")
+        return "__end__"
 
     logger.info("Validation: answer is valid, finishing")
     return "__end__"

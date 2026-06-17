@@ -16,17 +16,17 @@ async def wikipedia_fetch_node(state: AgentState) -> dict:
 
     if chunks and max_score >= WIKIPEDIA_FETCH_THRESHOLD:
         logger.info("Wikipedia fetch: skipped, RAG score is sufficient")
-        return {"wikipedia_fetched": False}
+        return {}
 
     try:
         article = await fetch_wikipedia(state["user_message"], lang=state["lang"])
     except Exception as exc:
         logger.warning("Wikipedia fetch failed", exc_info=exc)
-        return {"wikipedia_fetched": False, "error": str(exc)}
+        return {"wikipedia_attempted": True, "error": str(exc)}
 
     if not article:
         logger.info("Wikipedia: no article found")
-        return {"wikipedia_fetched": False}
+        return {"wikipedia_attempted": True}
 
     await index_wikipedia_article(article)
 
@@ -35,6 +35,7 @@ async def wikipedia_fetch_node(state: AgentState) -> dict:
     new_context = format_context(new_chunks) if new_chunks else None
 
     return {
+        "wikipedia_attempted": True,
         "wikipedia_fetched": True,
         "retrieved_chunks": new_chunks,
         "context": new_context,

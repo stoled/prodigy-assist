@@ -20,6 +20,7 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
             "retrieved_chunks": [],
             "context": None,
             "wikipedia_fetched": False,
+            "wikipedia_attempted": False,
             "final_answer": None,
             "error": None,
         }
