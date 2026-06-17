@@ -2,7 +2,6 @@ import logging
 
 from app.graph.state import AgentState
 from app.services.llm_service import generate_reply
-from app.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
