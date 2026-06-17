@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 from openai import AsyncOpenAI
 from app.config import settings
@@ -6,18 +7,26 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 client = AsyncOpenAI(
-    # base_url="https://openrouter.ai/api/v1",
     api_key=settings.ai_api_key,
 )
 
-SYSTEM_PROMPT = (
+MAX_RETRIES = 3
+
+# Загружаем system prompt из файла
+PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+
+def _load_prompt(filename: str) -> str:
+    path = PROMPTS_DIR / filename
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
+    return ""
+
+SYSTEM_PROMPT = _load_prompt("system.txt") or (
     "Ты умный ассистент-всезнайка. Отвечай чётко и по делу. "
     "Отвечай на том языке, на котором задан вопрос. "
     "Если используешь информацию из базы знаний — указывай источник. "
     "Если информации нет — честно сообщи, что не знаешь ответа, и не придумывай его."
 )
-
-MAX_RETRIES = 3
 
 
 async def generate_reply(
