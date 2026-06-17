@@ -1,5 +1,9 @@
+import logging
+
 from openai import AsyncOpenAI
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 client = AsyncOpenAI(
     # base_url="https://openrouter.ai/api/v1",
@@ -50,6 +54,10 @@ async def generate_reply(
         if result.strip():
             return result
 
-        print(f"Empty response from LLM, attempt {attempt + 1}/{MAX_RETRIES}")
+        logger.warning(
+            "Empty response from LLM",
+            extra={"attempt": attempt + 1, "max_retries": MAX_RETRIES},
+        )
 
+    logger.error("All LLM retries exhausted, returning empty response")
     return ""

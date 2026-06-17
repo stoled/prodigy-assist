@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { SendMessageDto } from './dto/send-message.dto';
 
-const HISTORY_LIMIT = 10; // последних пар вопрос-ответ
+const HISTORY_LIMIT = 20; // последних вопросов
 
 @Injectable()
 export class MessagesService {
@@ -81,22 +81,14 @@ export class MessagesService {
   ): Promise<{ role: string; content: string }[]> {
     const questions = await this.prisma.message.findMany({
       where: { userId, parentId: null },
-      include: {
-        replies: { orderBy: { createdAt: 'asc' }, take: 1 },
-      },
       orderBy: { createdAt: 'desc' },
       take: HISTORY_LIMIT,
+      select: { content: true },
     });
 
-    // Разворачиваем в хронологическом порядке и flatten в flat list
     return questions
       .reverse()
-      .flatMap((q) => [
-        { role: 'user', content: q.content },
-        ...(q.replies[0]
-          ? [{ role: 'assistant', content: q.replies[0].content }]
-          : []),
-      ]);
+      .map((q) => ({ role: 'user', content: q.content }));
   }
 
   private detectLanguage(text: string): string {
