@@ -9,18 +9,24 @@ SOURCE_PATTERN = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
 
 
 def validator_node(state: AgentState) -> dict:
-    """Проверяет, содержит ли ответ ссылки на источники."""
     answer = state.get("final_answer")
 
     if not answer:
         logger.warning("Validator: empty answer")
-        return {"validation": "empty"}
+        return {"validation": "empty", "retry_prompt": None}
 
     sources = SOURCE_PATTERN.findall(answer)
 
     if not sources and state.get("context"):
         logger.info("Validator: answer missing sources, triggering retry")
-        return {"validation": "missing_sources"}
+        return {
+            "validation": "missing_sources",
+            "retry_prompt": (
+                "Твой предыдущий ответ не содержал ссылки на источник. "
+                "Обязательно добавь в конец ответа ссылку в формате [Название](URL) "
+                "из предоставленного контекста."
+            ),
+        }
 
     logger.info("Validator: answer is valid", extra={"sources_count": len(sources)})
-    return {"validation": "valid"}
+    return {"validation": "valid", "retry_prompt": None}

@@ -2,7 +2,7 @@ import logging
 
 from app.graph.state import AgentState
 from app.wikipedia.fetcher import fetch_wikipedia
-from app.services.rag_service import index_wikipedia_article, search, format_context
+from app.services.rag_service import index_wikipedia_article
 
 logger = logging.getLogger(__name__)
 
@@ -10,13 +10,13 @@ WIKIPEDIA_FETCH_THRESHOLD = 0.7
 
 
 async def wikipedia_fetch_node(state: AgentState) -> dict:
-    """Загрузка статьи из Wikipedia, индексация и повторный поиск."""
+    """Загрузка статьи из Wikipedia и индексация."""
     chunks = state.get("retrieved_chunks", [])
     max_score = max((c["score"] for c in chunks), default=0.0)
 
     if chunks and max_score >= WIKIPEDIA_FETCH_THRESHOLD:
         logger.info("Wikipedia fetch: skipped, RAG score is sufficient")
-        return {}
+        return {"wikipedia_attempted": True}
 
     try:
         article = await fetch_wikipedia(state["user_message"], lang=state["lang"])
@@ -30,13 +30,7 @@ async def wikipedia_fetch_node(state: AgentState) -> dict:
 
     await index_wikipedia_article(article)
 
-    # Повторный поиск после индексации
-    new_chunks = await search(query=state["user_message"], top_k=5, min_score=0.5)
-    new_context = format_context(new_chunks) if new_chunks else None
-
     return {
         "wikipedia_attempted": True,
         "wikipedia_fetched": True,
-        "retrieved_chunks": new_chunks,
-        "context": new_context,
     }

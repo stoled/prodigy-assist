@@ -2,7 +2,6 @@ from typing import TypedDict, Optional
 
 
 class AgentState(TypedDict):
-    """Состояние LangGraph агента."""
     user_message: str
     lang: str
     history: list[dict]
@@ -15,4 +14,6 @@ class AgentState(TypedDict):
     error: Optional[str]
     max_rag_retries: int
     rag_retry_count: int
-    action: str  # "search" | "skip" — решение роутера
+    action: str
+    validation: str
+    retry_prompt: Optional[str]

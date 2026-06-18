@@ -7,10 +7,16 @@ logger = logging.getLogger(__name__)
 
 
 async def llm_node(state: AgentState) -> dict:
-    """Генерация ответа через LLM с контекстом из RAG."""
     try:
+        user_message = state["user_message"]
+
+        # При retry добавляем напоминание об источнике
+        retry_prompt = state.get("retry_prompt")
+        if retry_prompt:
+            user_message = f"{user_message}\n\n[Системное напоминание: {retry_prompt}]"
+
         reply = await generate_reply(
-            user_message=state["user_message"],
+            user_message=user_message,
             history=state.get("history", []),
             context=state.get("context"),
         )

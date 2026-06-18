@@ -13,15 +13,19 @@ from app.graph.nodes.validator import validator_node
 logger = logging.getLogger(__name__)
 
 
+def retry_node(state: AgentState) -> dict:
+    """Инкрементирует счётчик retry перед повторным вызовом LLM или RAG."""
+    count = state.get("rag_retry_count", 0) + 1
+    logger.info("Retry node", extra={"rag_retry_count": count})
+    return {"rag_retry_count": count}
+
+
 def should_search(state: AgentState) -> Literal["rag_search", "llm"]:
-    """Определяет маршрут после роутера."""
     action = state.get("action", "search")
     return "rag_search" if action == "search" else "llm"
 
 
 def should_fetch_wikipedia(state: AgentState) -> Literal["wikipedia_fetch", "llm"]:
-    """Проверяет, нужно ли фетчить Wikipedia."""
-    # Уже пробовали — не зацикливаемся
     if state.get("wikipedia_attempted"):
         logger.info("Wikipedia already attempted, skipping to LLM")
         return "llm"
@@ -34,81 +38,68 @@ def should_fetch_wikipedia(state: AgentState) -> Literal["wikipedia_fetch", "llm
     return "llm"
 
 
-def should_retry(state: AgentState) -> Literal["llm", "rag_search", "__end__"]:
-    """Определяет действие после валидатора."""
+def should_retry(state: AgentState) -> Literal["retry", "__end__"]:
     validation = state.get("validation", "valid")
     retry_count = state.get("rag_retry_count", 0)
     max_retries = state.get("max_rag_retries", 1)
 
-    if validation == "missing_sources" and retry_count < max_retries:
-        logger.info("Validation: retrying LLM with stricter source prompting")
-        state["rag_retry_count"] = retry_count + 1
-        return "llm"
+    if validation in ("missing_sources", "empty") and retry_count < max_retries:
+        logger.info(
+            "Validation: scheduling retry",
+            extra={"validation": validation, "retry_count": retry_count},
+        )
+        return "retry"
 
-    if validation == "empty":
-        if retry_count < max_retries:
-            logger.warning(
-                "Validation: empty answer, retrying with RAG search",
-                extra={"retry": retry_count + 1, "max_retries": max_retries},
-            )
-            state["rag_retry_count"] = retry_count + 1
-            return "rag_search"
-        logger.error("Validation: empty answer, max retries exhausted, finishing")
-        return "__end__"
-
-    logger.info("Validation: answer is valid, finishing")
+    logger.info("Validation: finishing", extra={"validation": validation})
     return "__end__"
 
 
+def after_retry(state: AgentState) -> Literal["llm", "rag_search"]:
+    """Определяет куда идти после инкремента счётчика."""
+    validation = state.get("validation", "valid")
+    return "rag_search" if validation == "empty" else "llm"
+
+
 def build_graph() -> StateGraph:
-    """Собирает и компилирует граф."""
     workflow = StateGraph(AgentState)
 
-    # Регистрируем узлы
     workflow.add_node("router", router_node)
     workflow.add_node("rag_search", rag_search_node)
     workflow.add_node("wikipedia_fetch", wikipedia_fetch_node)
     workflow.add_node("llm", llm_node)
     workflow.add_node("validator", validator_node)
+    workflow.add_node("retry", retry_node)
 
-    # Начало — всегда роутер
     workflow.set_entry_point("router")
 
-    # Условные переходы
     workflow.add_conditional_edges(
         "router",
         should_search,
-        {
-            "rag_search": "rag_search",
-            "llm": "llm",
-        },
+        {"rag_search": "rag_search", "llm": "llm"},
     )
 
     workflow.add_conditional_edges(
         "rag_search",
         should_fetch_wikipedia,
-        {
-            "wikipedia_fetch": "wikipedia_fetch",
-            "llm": "llm",
-        },
+        {"wikipedia_fetch": "wikipedia_fetch", "llm": "llm"},
     )
 
     workflow.add_edge("wikipedia_fetch", "rag_search")
-
     workflow.add_edge("llm", "validator")
 
     workflow.add_conditional_edges(
         "validator",
         should_retry,
-        {
-            "llm": "llm",
-            "rag_search": "rag_search",
-            "__end__": END,
-        },
+        {"retry": "retry", "__end__": END},
+    )
+
+    workflow.add_conditional_edges(
+        "retry",
+        after_retry,
+        {"llm": "llm", "rag_search": "rag_search"},
     )
 
     return workflow.compile()
 
 
-# Синглтон графа
 graph = build_graph()

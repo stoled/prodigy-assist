@@ -12,10 +12,9 @@ router = APIRouter()
 @router.post("/generate", response_model=GenerateResponse)
 async def generate(body: GenerateRequest) -> GenerateResponse:
     try:
-        # Инициализируем состояние графа
         initial_state = {
             "user_message": body.message,
-            "lang": body.lang or "en",
+            "lang": body.lang or "ru",
             "history": body.history or [],
             "retrieved_chunks": [],
             "context": None,
@@ -24,21 +23,20 @@ async def generate(body: GenerateRequest) -> GenerateResponse:
             "wikipedia_article": None,
             "final_answer": None,
             "error": None,
-            "action": "search",
+            "action": "search" if body.use_rag else "skip",
+            "validation": "valid",
             "max_rag_retries": 1,
             "rag_retry_count": 0,
+            "retry_prompt": None,
         }
 
-        # Запускаем граф
         result = await graph.ainvoke(initial_state)
 
-        # Проверяем ошибки
         if result.get("error"):
             logger.error("Graph execution error", extra={"error": result["error"]})
             raise ValueError(result["error"])
 
         final_answer = result.get("final_answer") or "Не удалось получить ответ."
-
         return GenerateResponse(reply=final_answer)
 
     except ValueError as e:
