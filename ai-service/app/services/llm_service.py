@@ -1,8 +1,8 @@
 import logging
-from pathlib import Path
 
 from openai import AsyncOpenAI
 from app.config import settings
+from app.services.prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -11,22 +11,6 @@ client = AsyncOpenAI(
 )
 
 MAX_RETRIES = 3
-
-# Загружаем system prompt из файла
-PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
-
-def _load_prompt(filename: str) -> str:
-    path = PROMPTS_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8").strip()
-    return ""
-
-SYSTEM_PROMPT = _load_prompt("system.txt") or (
-    "Ты умный ассистент-всезнайка. Отвечай чётко и по делу. "
-    "Отвечай на том языке, на котором задан вопрос. "
-    "Если используешь информацию из базы знаний — указывай источник. "
-    "Если информации нет — честно сообщи, что не знаешь ответа, и не придумывай его."
-)
 
 
 async def generate_reply(
@@ -39,7 +23,7 @@ async def generate_reply(
             f"Message too long. Maximum length is {settings.max_message_length} characters."
         )
 
-    system_content = SYSTEM_PROMPT
+    system_content = load_prompt("system")
     if context:
         system_content += f"\n\nРелевантный контекст из базы знаний:\n{context}"
 

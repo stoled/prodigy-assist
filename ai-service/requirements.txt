@@ -13,3 +13,4 @@ langgraph
 langchain
 langchain-openai
 mcp
+langchain-mcp-adapters
