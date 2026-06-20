@@ -27,13 +27,14 @@ async def search_knowledge(query: str, top_k: int = 5) -> str:
 
 
 @mcp.tool()
-async def fetch_wikipedia_article(topic: str, lang: str = "ru") -> str:
+async def fetch_wikipedia_article(topic: str, lang: str) -> str:
     """Загружает статью из Wikipedia по конкретной теме и индексирует её в базу знаний.
-    Используй ТОЛЬКО если search_knowledge не нашёл достаточно информации
-    (вернул "Ничего не найдено" или неполный результат).
-    topic должен быть точным названием темы (например "Альберт Эйнштейн"),
+    Используй ТОЛЬКО если search_knowledge не нашёл достаточно информации.
+    topic должен быть точным названием темы (например "Isaac Newton" или "Леонардо да Винчи"),
     а не полным вопросом пользователя.
-    lang: "ru" для русскоязычных тем, "en" для остальных.
+    ВАЖНО: lang ОБЯЗАТЕЛЬНО должен совпадать с языком вопроса пользователя:
+    "ru" если пользователь спросил на русском, "en" если на английском.
+    Никогда не используй "ru" по умолчанию для англоязычных вопросов.
     """
     article = await fetch_wikipedia(topic, lang=lang)
     if not article:
