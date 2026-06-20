@@ -9,6 +9,7 @@ from app.services.prompt_loader import load_prompt
 logger = logging.getLogger(__name__)
 
 MCP_SERVER_URL = "http://localhost:8000/mcp/sse"
+MAX_TOOL_ROUNDS = 3
 
 mcp_client = MultiServerMCPClient(
     {"prodigy": {"url": MCP_SERVER_URL, "transport": "sse"}}
@@ -28,9 +29,6 @@ async def llm_node(state: AgentState) -> dict:
         ).bind_tools(tools)
 
         system_content = load_prompt("system")
-        if state.get("context"):
-            system_content += f"\n\nРелевантный контекст из базы знаний:\n{state['context']}"
-
         messages = [SystemMessage(content=system_content)]
 
         for h in state.get("history", []):
@@ -46,12 +44,16 @@ async def llm_node(state: AgentState) -> dict:
 
         messages.append(HumanMessage(content=user_message))
 
-        response = await llm.ainvoke(messages)
+        # Цикл tool calling — модель может вызывать инструменты несколько раз подряд
+        for round_num in range(MAX_TOOL_ROUNDS):
+            response = await llm.ainvoke(messages)
 
-        if response.tool_calls:
+            if not response.tool_calls:
+                return {"final_answer": response.content}
+
             logger.info(
                 "LLM requested tool calls",
-                extra={"tools": [t["name"] for t in response.tool_calls]},
+                extra={"round": round_num, "tools": [t["name"] for t in response.tool_calls]},
             )
             messages.append(response)
 
@@ -70,10 +72,9 @@ async def llm_node(state: AgentState) -> dict:
                             ToolMessage(content=f"Ошибка: {exc}", tool_call_id=tool_call["id"])
                         )
 
-            final_response = await llm.ainvoke(messages)
-            return {"final_answer": final_response.content}
-
-        return {"final_answer": response.content}
+        # Если за MAX_TOOL_ROUNDS не получили финальный ответ — последний вызов без tools
+        final_response = await llm.ainvoke(messages)
+        return {"final_answer": final_response.content}
 
     except Exception as exc:
         logger.error("LLM generation failed", exc_info=exc)

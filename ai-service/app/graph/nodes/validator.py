@@ -7,6 +7,9 @@ logger = logging.getLogger(__name__)
 
 SOURCE_PATTERN = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
 
+# Маркеры того, что ответ опирался на базу знаний / Wikipedia
+KNOWLEDGE_MARKERS = ["wikipedia.org", "[Источник", "[Title", "согласно статье"]
+
 
 def validator_node(state: AgentState) -> dict:
     answer = state.get("final_answer")
@@ -16,15 +19,15 @@ def validator_node(state: AgentState) -> dict:
         return {"validation": "empty", "retry_prompt": None}
 
     sources = SOURCE_PATTERN.findall(answer)
+    looks_like_knowledge_based = any(m.lower() in answer.lower() for m in KNOWLEDGE_MARKERS)
 
-    if not sources and state.get("context"):
-        logger.info("Validator: answer missing sources, triggering retry")
+    if not sources and looks_like_knowledge_based:
+        logger.info("Validator: answer references knowledge but missing formatted source")
         return {
             "validation": "missing_sources",
             "retry_prompt": (
-                "Твой предыдущий ответ не содержал ссылки на источник. "
-                "Обязательно добавь в конец ответа ссылку в формате [Название](URL) "
-                "из предоставленного контекста."
+                "Твой ответ ссылается на информацию, но без корректно оформленного источника. "
+                "Добавь в конец ответа ссылку в формате [Название](URL)."
             ),
         }
 
