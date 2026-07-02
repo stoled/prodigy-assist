@@ -15,7 +15,7 @@ export class HealthController {
   async health() {
     const checks: Record<string, string> = {};
 
-    // Проверка PostgreSQL
+    // Check PostgreSQL
     try {
       await this.prisma.$queryRaw`SELECT 1`;
       checks['postgres'] = 'ok';
@@ -24,7 +24,7 @@ export class HealthController {
         `error: ${e instanceof Error ? e.message : 'unknown'}`;
     }
 
-    // Проверка AI Service
+    // Check AI Service
     try {
       const aiServiceUrl = this.configService.get<string>('AI_SERVICE_URL');
       await this.httpService.axiosRef.get(`${aiServiceUrl}/health`, {

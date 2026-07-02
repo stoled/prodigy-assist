@@ -82,30 +82,30 @@ def extract_topic(query: str) -> str:
 
 def _best_title(query: str, titles: list[str]) -> str | None:
     """
-    Выбирает наиболее подходящий заголовок из результатов поиска.
-    Предпочитает точное совпадение с запросом.
+    Picks the best matching title from the search results.
+    Prefers an exact match with the query.
     """
     if not titles:
         return None
 
     query_lower = query.lower()
 
-    # Точное совпадение
+    # Exact match
     for title in titles:
         if title.lower() == query_lower:
             return title
 
-    # Частичное совпадение — заголовок содержит запрос
+    # Partial match — title contains the query
     for title in titles:
         if query_lower in title.lower():
             return title
 
-    # Запрос содержит заголовок
+    # Query contains the title
     for title in titles:
         if title.lower() in query_lower:
             return title
 
-    # Первый результат как fallback
+    # First result as fallback
     return titles[0]
 
 
@@ -131,7 +131,7 @@ async def fetch_wikipedia(topic: str, lang: str | None = None) -> WikipediaArtic
         logger.debug("Empty Wikipedia query received")
         return None
 
-    # Очищаем тему до поиска
+    # Clean up the topic before searching
     clean_query = extract_topic(query)
     logger.info("Searching Wikipedia", extra={"query": clean_query, "lang": lang})
 

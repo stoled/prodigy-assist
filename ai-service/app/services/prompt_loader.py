@@ -10,8 +10,8 @@ PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 @lru_cache(maxsize=None)
 def load_prompt(name: str) -> str:
     """
-    Загружает промпт из файла prompts/{name}.txt.
-    Кэшируется через lru_cache — читается с диска один раз за всё время жизни процесса.
+    Loads a prompt from the file prompts/{name}.txt.
+    Cached via lru_cache — read from disk only once per process lifetime.
     """
     path = PROMPTS_DIR / f"{name}.txt"
     if not path.exists():

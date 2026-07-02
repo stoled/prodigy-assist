@@ -23,8 +23,8 @@ model Message {
   userId    String
   user      User     @relation(fields: [userId], references: [id])
 
-  // Связь вопрос-ответ
-  parentId  String?  // ID сообщения-вопроса (null для вопросов)
+  // Question-answer relation
+  parentId  String?  // ID of the question message (null for questions)
   parent    Message? @relation("QuestionAnswer", fields: [parentId], references: [id])
   replies   Message[] @relation("QuestionAnswer")
 
@@ -38,7 +38,7 @@ model Document {
   id        String          @id @default(uuid())
   title     String
   content   String
-  source    String          // URL Wikipedia или "manual"
+  source    String          // Wikipedia URL or "manual"
   lang      String          @default("en")
   createdAt DateTime        @default(now())
 

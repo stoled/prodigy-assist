@@ -44,7 +44,7 @@ async def llm_node(state: AgentState) -> dict:
 
         messages.append(HumanMessage(content=user_message))
 
-        # Цикл tool calling — модель может вызывать инструменты несколько раз подряд
+        # Tool calling loop — the model can call tools several times in a row
         for round_num in range(MAX_TOOL_ROUNDS):
             response = await llm.ainvoke(messages)
 
@@ -72,7 +72,7 @@ async def llm_node(state: AgentState) -> dict:
                             ToolMessage(content=f"Ошибка: {exc}", tool_call_id=tool_call["id"])
                         )
 
-        # Если за MAX_TOOL_ROUNDS не получили финальный ответ — последний вызов без tools
+        # If no final answer was produced within MAX_TOOL_ROUNDS — one last call without tools
         final_response = await llm.ainvoke(messages)
         return {"final_answer": final_response.content}
 

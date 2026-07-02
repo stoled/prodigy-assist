@@ -74,7 +74,7 @@ def format_context(chunks: list[dict]) -> str:
 
 
 async def source_exists(source_url: str) -> bool:
-    """Проверяет — есть ли уже документ с таким source URL в БД."""
+    """Checks whether a document with this source URL already exists in the DB."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -85,7 +85,7 @@ async def source_exists(source_url: str) -> bool:
 
 
 async def save_document(title: str, content: str, source: str, lang: str) -> str:
-    """Сохраняет Document в PostgreSQL. Возвращает id."""
+    """Saves a Document to PostgreSQL. Returns its id."""
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -101,9 +101,9 @@ async def save_document(title: str, content: str, source: str, lang: str) -> str
 
 async def index_wikipedia_article(article) -> tuple[str, int]:
     """
-    Полный цикл: сохранить Document + проиндексировать чанки.
-    Возвращает (document_id, chunks_count).
-    Пропускает если статья уже проиндексирована (дедупликация по URL).
+    Full cycle: save the Document + index its chunks.
+    Returns (document_id, chunks_count).
+    Skips if the article is already indexed (deduplication by URL).
     """
     from app.wikipedia.parser import article_to_text
 

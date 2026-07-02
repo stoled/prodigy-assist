@@ -20,7 +20,7 @@ export class KnowledgeService {
   ) {}
 
   async create(dto: CreateKnowledgeDto) {
-    // 1. Сохранить документ в PostgreSQL
+    // 1. Save the document in PostgreSQL
     const document = await this.prisma.document.create({
       data: {
         title: dto.title,
@@ -30,7 +30,7 @@ export class KnowledgeService {
       },
     });
 
-    // 2. Отправить на индексацию в AI Service
+    // 2. Send it for indexing to AI Service
     const aiServiceUrl = this.configService.get<string>('AI_SERVICE_URL');
 
     try {
@@ -79,7 +79,7 @@ export class KnowledgeService {
       throw new NotFoundException(`Document ${id} not found`);
     }
 
-    // Чанки удалятся каскадно (onDelete: Cascade)
+    // Chunks will be removed via cascade (onDelete: Cascade)
     await this.prisma.document.delete({ where: { id } });
 
     return { success: true };

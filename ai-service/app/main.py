@@ -20,5 +20,5 @@ app.include_router(generate_router)
 app.include_router(health_router)
 app.include_router(embeddings_router)
 
-# MCP Server доступен по /mcp
+# MCP Server is available at /mcp
 app.mount("/mcp", create_sse_app())

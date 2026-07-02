@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 SOURCE_PATTERN = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
 
-# Маркеры того, что ответ опирался на базу знаний / Wikipedia
+# Markers indicating the answer relied on the knowledge base / Wikipedia
 KNOWLEDGE_MARKERS = ["wikipedia.org", "[Источник", "[Title", "согласно статье"]
 
 

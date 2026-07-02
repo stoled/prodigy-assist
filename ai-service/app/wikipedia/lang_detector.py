@@ -6,8 +6,8 @@ DEFAULT_LANG = "en"
 
 def detect_lang(text: str) -> str:
     """
-    Определяет язык текста.
-    Возвращает "ru" или "en". Для всех остальных языков — "en".
+    Detects the language of the text.
+    Returns "ru" or "en". For any other language — "en".
     """
     try:
         lang = detect(text)

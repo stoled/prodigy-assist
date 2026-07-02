@@ -5,8 +5,8 @@ from app.wikipedia.fetcher import WikipediaArticle, WikipediaSection
 
 def article_to_text(article: WikipediaArticle) -> str:
     """
-    Собирает полный текст статьи для индексации.
-    Summary + все разделы через разделитель.
+    Builds the full article text for indexing.
+    Summary + all sections joined with a separator.
     """
     parts = [article.summary]
 
@@ -18,7 +18,7 @@ def article_to_text(article: WikipediaArticle) -> str:
 
 
 def _fetch_html(url: str) -> str:
-    """Загружает HTML страницы Wikipedia."""
+    """Fetches the HTML of a Wikipedia page."""
     headers = {"User-Agent": "prodigy-knowledge-bot/1.0"}
     response = requests.get(url, headers=headers, timeout=10)
     response.raise_for_status()
@@ -27,27 +27,27 @@ def _fetch_html(url: str) -> str:
 
 def parse_html_fallback(url: str) -> WikipediaArticle | None:
     """
-    BeautifulSoup fallback — парсит HTML напрямую.
-    Используется когда Wikipedia API возвращает пустой контент.
+    BeautifulSoup fallback — parses the HTML directly.
+    Used when the Wikipedia API returns empty content.
     """
     try:
         html = _fetch_html(url)
         soup = BeautifulSoup(html, "html.parser")
 
-        # Заголовок
+        # Title
         title_el = soup.find("h1", {"id": "firstHeading"})
         title = title_el.get_text(strip=True) if title_el else ""
 
-        # Основной контент
+        # Main content
         content_div = soup.find("div", {"id": "mw-content-text"})
         if not content_div:
             return None
 
-        # Убираем служебные блоки
+        # Strip out service blocks
         for tag in content_div.find_all(["table", "sup", "style", "script"]):
             tag.decompose()
 
-        # Summary — первый параграф
+        # Summary — first paragraph
         paragraphs = content_div.find_all("p", recursive=True)
         summary = ""
         for p in paragraphs:
@@ -56,7 +56,7 @@ def parse_html_fallback(url: str) -> WikipediaArticle | None:
                 summary = text
                 break
 
-        # Разделы по H2
+        # Sections by H2
         sections = []
         for h2 in content_div.find_all("h2"):
             section_title = h2.get_text(strip=True).replace("[править | править код]", "").strip()

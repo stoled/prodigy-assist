@@ -13,7 +13,7 @@ async def health() -> dict:
 async def ready() -> dict:
     checks = {}
 
-    # Проверка PostgreSQL
+    # Check PostgreSQL
     try:
         pool = await get_pool()
         async with pool.acquire() as conn:

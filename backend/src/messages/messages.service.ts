@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { SendMessageDto } from './dto/send-message.dto';
 
-const HISTORY_LIMIT = 20; // последних вопросов
+const HISTORY_LIMIT = 20; // last questions
 
 @Injectable()
 export class MessagesService {
@@ -24,15 +24,15 @@ export class MessagesService {
   ) {}
 
   async send(dto: SendMessageDto): Promise<{ reply: string }> {
-    // 1. Найти или создать пользователя
+    // 1. Find or create the user
     const user = await this.usersService.findOrCreate({
       telegramId: dto.telegramId,
     });
 
-    // 2. Загрузить историю диалога
+    // 2. Load the conversation history
     const history = await this.buildHistory(user.id);
 
-    // 3. Сохранить сообщение пользователя (вопрос)
+    // 3. Save the user's message (question)
     const userMessage = await this.prisma.message.create({
       data: {
         role: 'user',
@@ -42,7 +42,7 @@ export class MessagesService {
       },
     });
 
-    // 4. Запросить ответ у AI Service с retry логикой
+    // 4. Request a reply from AI Service with retry logic
     const aiServiceUrl = this.configService.get<string>('AI_SERVICE_URL');
     let reply: string;
 
@@ -63,7 +63,7 @@ export class MessagesService {
       );
     }
 
-    // 5. Сохранить ответ ассистента (связать с вопросом)
+    // 5. Save the assistant's reply (link it to the question)
     await this.prisma.message.create({
       data: {
         role: 'assistant',
